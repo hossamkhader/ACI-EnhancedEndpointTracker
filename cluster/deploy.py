@@ -12,7 +12,8 @@ import traceback
 # update path to allow for semi-relatively imports
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
-from swarm.create_config import ClusterConfig
+from swarm.create_config import ClusterConfig as SwarmClusterConfig
+from kubernetes.create_config import ClusterConfig as KubernetesClusterConfig
 from swarm.swarmer import Swarmer
 
 logger = logging.getLogger(__name__)
@@ -68,13 +69,13 @@ def prompt_user_for_node_count():
     default_count = 1
     while True:
         node_count = raw_input("Number of nodes in cluster [%s]: " % default_count).strip()
-        if re.search("^[0-9]+$", node_count) and int(node_count)<ClusterConfig.MAX_NODES:
+        if re.search("^[0-9]+$", node_count) and int(node_count)<SwarmClusterConfig.MAX_NODES:
             return int(node_count)
         elif len(node_count) == 0:
             return default_count
         else:
             print("Invalid value(%s) for node. Please choose a value between 1 and %s" % (
-                node_count, ClusterConfig.MAX_NODES))
+                node_count, SwarmClusterConfig.MAX_NODES))
 
 if __name__ == "__main__":
 
@@ -160,6 +161,14 @@ if __name__ == "__main__":
         help="""path to swarm configuration file (default: %s)""" % default_config
     )
     parser.add_argument(
+        "--cluster_type",
+        dest="cluster_type",
+        # action="store_true",
+        choices=["swarm", "kubernetes"],
+        default="swarm",
+        help="""cluster type (swarm|kubernetes)"""
+    )
+    parser.add_argument(
         "-n","--nodes",
         dest="nodes",
         metavar="N",
@@ -178,14 +187,14 @@ if __name__ == "__main__":
         help="password for connecting to other nodes within the cluster used by init/ts actions",
     )
     parser.add_argument(
-        "-d","--debug", 
+        "-d", "--debug",
         dest="debug", 
         choices=["debug","info","warn","error"],
         default="info",
         help="debug loglevel", 
     )
     parser.add_argument(
-        "-l","--log", 
+        "-l", "--log",
         dest="logfile", 
         default=os.path.realpath("%s/.deploy.log" % os.path.expanduser("~")),
         help="log file",
@@ -240,7 +249,7 @@ if __name__ == "__main__":
                 args.nodes = 1
 
         # validate config file
-        config = ClusterConfig(image, 
+        config = SwarmClusterConfig(image,
                     node_count=args.nodes, 
                     app_name=args.name,
                     worker_count=args.worker_count,
@@ -255,12 +264,28 @@ if __name__ == "__main__":
             config.import_config(args.swarm_config)
             config.build_compose()
         elif args.deploy:
-            config.import_config(args.swarm_config)
-            config.build_compose()
-            swarm = Swarmer(config, username=args.username, password=args.password)
-            swarm.init_swarm()
-            swarm.deploy_service()
-            logger.info("deployment complete")
+            if args.cluster_type == "swarm":
+                config.import_config(args.swarm_config)
+                config.build_compose()
+                swarm = Swarmer(config, username=args.username, password=args.password)
+                swarm.init_swarm()
+                swarm.deploy_service()
+                logger.info("deployment complete")
+            if args.cluster_type == "kubernetes":
+                config = KubernetesClusterConfig(image,
+                                            node_count=args.nodes,
+                                            app_name=args.name,
+                                            worker_count=args.worker_count,
+                                            db_shard=args.db_shard,
+                                            db_replica=args.db_replica,
+                                            db_memory=args.db_memory,
+                                            compose_file=args.compose_file,
+                                            )
+                config.import_config(args.swarm_config)
+                config.build_compose()
+                print("Run: kubectl create -f ~/compose.yml")
+
+
         elif args.techsupport:
             swarm = Swarmer(config, username=args.username, password=args.password)
             swarm.collect_techsupport(logfile=args.logfile)
@@ -282,12 +307,15 @@ if __name__ == "__main__":
                     print("invalid option '%s'" % confirm)
                     confirm = None
     except Exception as e:
+        import sys, traceback
+        ex_type, ex, tb = sys.exc_info()
+        traceback.print_tb(tb)
         logger.debug("Traceback:\n%s", traceback.format_exc())
         logger.error("Unable to deploy cluster: %s", e)
         sys.exit(1)
     except KeyboardInterrupt as e:
         logger.debug("keyboard interrupt")
-        print "\nBye!"
+        print("\nBye!")
         sys.exit(1)
 
 

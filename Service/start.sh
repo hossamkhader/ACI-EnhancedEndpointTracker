@@ -249,8 +249,8 @@ function create_app_config_file() {
         echo "MONGO_HOST=\"$MONGO_HOST\"" >> $config_file
         echo "MONGO_PORT=$MONGO_PORT" >> $config_file
         echo "PROXY_URL=\"https://localhost:$WEB_PORT\"" >> $config_file
-    elif [ "$HOSTED_PLATFORM" == "SWARM" ] ; then
-        log "updating $config_file with swarm settings"
+    elif [ "$HOSTED_PLATFORM" == "SWARM" ] || [ "$HOSTED_PLATFORM" == "KUBERNETES" ] ; then
+        log "updating $config_file with swarm|KUBERNETES settings"
         echo "REDIS_HOST=\"$REDIS_HOST\"" >> $config_file
         echo "REDIS_PORT=$REDIS_PORT" >> $config_file
         echo "MONGO_HOST=\"$MONGO_HOST\"" >> $config_file
@@ -403,7 +403,7 @@ function run_db_cluster() {
     eval $cmd
 }
 
-# run an individual db role (mongos, cfg, or single shard/replica) in swarm mode
+# run an individual db role (mongos, cfg, or single shard/replica) in swarm|kubernetes mode
 function run_db_single_role(){
     # create a folder for cfg and each shard then start each service
     set_status "run db single role" 
@@ -575,7 +575,7 @@ function validate_identity() {
 function main(){
     # update LOG_FILE to unique service name if HOSTED_PLATFORM set and not all-in-one
     if [ "$role" != "all-in-one" ] ; then
-        if [ "$HOSTED_PLATFORM" == "APIC" ]  || [ "$HOSTED_PLATFORM" == "SWARM" ] ; then
+        if [ "$HOSTED_PLATFORM" == "APIC" ]  || [ "$HOSTED_PLATFORM" == "SWARM" ] || [ "$HOSTED_PLATFORM" == "KUBERNETES" ] ; then
             LOG_FILE="$LOG_DIR/start_$role"
             if [ "$LOCAL_REPLICA" != "" ] ; then
                 LOG_FILE="$LOG_FILE-$LOCAL_REPLICA"
